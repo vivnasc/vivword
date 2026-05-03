@@ -149,8 +149,9 @@ vivword/
 ├── manifest.xml              ← XML clássico, WordApi 1.1
 ├── public/
 │   ├── taskpane.html
-│   ├── taskpane.js           ← Office.js + chat
-│   ├── taskpane.css          ← tema escuro / terracota
+│   ├── taskpane.js                 ← Office.js + chat
+│   ├── taskpane.css                ← tema escuro / terracota
+│   ├── default-system-prompt.txt   ← instrução padrão (revisor literário)
 │   ├── icon-32.png
 │   ├── icon-64.png
 │   └── icon-80.png
@@ -161,6 +162,12 @@ vivword/
 ├── .env.example
 └── README.md
 ```
+
+---
+
+## 9b. Instrução padrão (system prompt)
+
+O campo **"Instrução para o Claude"** no taskpane vem pré-preenchido a partir de `public/default-system-prompt.txt` (carregado por fetch no boot). Para mudar o default sem tocar em código, edita esse ficheiro e faz commit + redeploy. O botão **"Repor instrução padrão"** (visível quando a secção está expandida) recarrega o ficheiro a quente. O valor da sessão pode sempre ser editado livremente — só é enviado como `system` ao chamar a API.
 
 ---
 

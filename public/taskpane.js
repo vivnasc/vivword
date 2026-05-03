@@ -27,6 +27,7 @@
     bmMode: $('#bmMode'),
     sysToggle: $('#sysToggle'),
     sysPrompt: $('#sysPrompt'),
+    sysReset: $('#sysReset'),
     contextChip: $('#contextChip'),
     contextLabel: $('#contextLabel'),
     contextClear: $('#contextClear'),
@@ -34,12 +35,39 @@
     app: $('#app'),
   };
 
+  // ---------- Default system prompt (carregado de ficheiro) ----------
+  async function loadDefaultSystemPrompt({ force = false } = {}) {
+    try {
+      const r = await fetch('default-system-prompt.txt', { cache: 'no-store' });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const text = (await r.text()).trim();
+      if (!text) return;
+      // Só sobrescreve se o campo estiver vazio, ou se for reposição explícita.
+      if (force || !els.sysPrompt.value.trim()) {
+        els.sysPrompt.value = text;
+      }
+      els.sysReset.dataset.available = '1';
+      // Visível apenas quando a secção do prompt está expandida.
+      const expanded = els.sysToggle.getAttribute('aria-expanded') === 'true';
+      els.sysReset.hidden = !expanded;
+      els.sysPrompt.placeholder = 'Ex.: És revisor literário. Mantém o estilo da autora.';
+    } catch (e) {
+      els.sysPrompt.placeholder = 'Ex.: És revisor literário. Mantém o estilo da autora.';
+      // Falha silenciosa; o campo continua editável e a sessão funciona.
+      if (typeof console !== 'undefined') console.warn('default-system-prompt:', e.message);
+    }
+  }
+
   // ---------- Office.js boot ----------
   let officeReady = false;
   if (typeof Office !== 'undefined') {
     Office.onReady(() => {
       officeReady = true;
+      loadDefaultSystemPrompt();
     });
+  } else {
+    // Fora do Word (preview no browser): carregar à mesma.
+    loadDefaultSystemPrompt();
   }
 
   // ---------- Render ----------
@@ -322,7 +350,14 @@
       const expanded = els.sysToggle.getAttribute('aria-expanded') === 'true';
       els.sysToggle.setAttribute('aria-expanded', expanded ? 'false' : 'true');
       els.sysPrompt.hidden = expanded;
+      els.sysReset.hidden = expanded || !els.sysReset.dataset.available;
       if (!expanded) els.sysPrompt.focus();
+    });
+
+    els.sysReset.addEventListener('click', () => {
+      const hasContent = els.sysPrompt.value.trim().length > 0;
+      if (hasContent && !confirm('Substituir a instrução actual pela versão padrão?')) return;
+      loadDefaultSystemPrompt({ force: true });
     });
 
     els.contextClear.addEventListener('click', () => {
