@@ -14,8 +14,7 @@
     {
       "source": "/taskpane.html",
       "headers": [
-        { "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" },
-        { "key": "Content-Security-Policy", "value": "default-src 'self' https://appsforoffice.microsoft.com; script-src 'self' https://appsforoffice.microsoft.com 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors https://*.officeapps.live.com https://*.office.com https://*.office365.com https://outlook.office.com https://outlook.office365.com https://word-edit.officeapps.live.com https://word.officeapps.live.com" }
+        { "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }
       ]
     },
     {
