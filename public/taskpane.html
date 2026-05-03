@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="pt-PT">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+  <title>VivWord</title>
+  <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+  <link rel="stylesheet" href="taskpane.css" />
+</head>
+<body>
+  <div id="app" aria-busy="false">
+
+    <header class="toolbar" role="toolbar" aria-label="Acções no documento">
+      <button type="button" class="tool" data-action="read-selection" title="Ler texto seleccionado">Ler selecção</button>
+      <button type="button" class="tool" data-action="read-document" title="Ler documento todo">Ler doc</button>
+      <button type="button" class="tool" data-action="insert" title="Inserir última resposta no cursor">Inserir</button>
+      <button type="button" class="tool" data-action="replace" title="Substituir selecção pela última resposta">Substituir</button>
+    </header>
+
+    <section class="system-block">
+      <button type="button" id="sysToggle" class="sys-toggle" aria-expanded="false" aria-controls="sysPrompt">
+        <span class="chev" aria-hidden="true">▸</span> Instrução para o Claude
+      </button>
+      <textarea id="sysPrompt" class="sys-prompt" rows="3" placeholder="Ex.: És revisor literário. Mantém o estilo da autora." hidden></textarea>
+    </section>
+
+    <section id="contextChip" class="context-chip" hidden>
+      <span id="contextLabel"></span>
+      <button type="button" id="contextClear" aria-label="Remover contexto">×</button>
+    </section>
+
+    <main id="chat" class="chat" aria-live="polite" aria-label="Conversa com Claude">
+      <div class="empty-hint">
+        <p>Olá. Pergunta algo, ou usa os botões acima para enviar texto do documento ao Claude.</p>
+      </div>
+    </main>
+
+    <div id="loading" class="loading" hidden>
+      <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+    </div>
+
+    <form id="composer" class="composer" autocomplete="off">
+      <textarea
+        id="input"
+        rows="2"
+        placeholder="Escreve aqui…"
+        aria-label="Mensagem"
+      ></textarea>
+      <button type="submit" id="sendBtn" class="send" aria-label="Enviar">Enviar</button>
+    </form>
+
+    <footer class="footer">
+      <div class="footer-row">
+        <label class="model-select">
+          Modelo
+          <select id="model">
+            <option value="claude-opus-4-5" selected>Opus 4.5</option>
+            <option value="claude-sonnet-4-5">Sonnet 4.5</option>
+          </select>
+        </label>
+        <label class="bm-toggle" title="Redacção activa de NUITs e códigos BM antes do envio">
+          <input type="checkbox" id="bmMode" />
+          Modo BM
+        </label>
+        <button type="button" id="clearChat" class="link-btn" title="Limpar conversa desta sessão">Limpar</button>
+      </div>
+      <div class="warn">⚠ Não inserir dados confidenciais BM. Uso pessoal apenas.</div>
+    </footer>
+
+  </div>
+
+  <script src="taskpane.js"></script>
+</body>
+</html>

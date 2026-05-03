@@ -1,0 +1,14 @@
+{
+  "name": "vivword",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Sidebar Word add-in que liga o documento ao Claude (Anthropic API). Uso pessoal.",
+  "scripts": {
+    "validate": "office-addin-manifest validate manifest.xml",
+    "dev": "vercel dev",
+    "deploy": "vercel --prod"
+  },
+  "devDependencies": {
+    "office-addin-manifest": "^1.13.6"
+  }
+}

@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<OfficeApp
+  xmlns="http://schemas.microsoft.com/office/appforoffice/1.1"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xmlns:bt="http://schemas.microsoft.com/office/officeappbasictypes/1.0"
+  xmlns:ov="http://schemas.microsoft.com/office/taskpaneappversionoverrides"
+  xsi:type="TaskPaneApp">
+
+  <Id>6d66a87b-49b7-4337-a726-5ffefb7492b7</Id>
+  <Version>1.0.0.0</Version>
+  <ProviderName>Vivnasc</ProviderName>
+  <DefaultLocale>pt-PT</DefaultLocale>
+  <DisplayName DefaultValue="VivWord" />
+  <Description DefaultValue="Sidebar de chat com Claude (Anthropic) dentro do Word. Lê selecção, lê documento, insere e substitui texto." />
+  <IconUrl DefaultValue="https://vivword.vercel.app/icon-64.png" />
+  <HighResolutionIconUrl DefaultValue="https://vivword.vercel.app/icon-80.png" />
+  <SupportUrl DefaultValue="https://github.com/vivnasc/vivword" />
+
+  <AppDomains>
+    <AppDomain>https://vivword.vercel.app</AppDomain>
+    <AppDomain>https://api.anthropic.com</AppDomain>
+  </AppDomains>
+
+  <Hosts>
+    <Host Name="Document" />
+  </Hosts>
+
+  <Requirements>
+    <Sets DefaultMinVersion="1.1">
+      <Set Name="WordApi" MinVersion="1.1" />
+    </Sets>
+  </Requirements>
+
+  <DefaultSettings>
+    <SourceLocation DefaultValue="https://vivword.vercel.app/taskpane.html" />
+  </DefaultSettings>
+
+  <Permissions>ReadWriteDocument</Permissions>
+
+</OfficeApp>
