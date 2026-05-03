@@ -1,0 +1,9 @@
+Cortar gordura no trecho seleccionado. Objectivo: 20% menos palavras, mantendo voz e ritmo.
+
+Devolve:
+
+1. **Original com cortes marcados** — versão integral, com [colchetes] à volta do que retirarias.
+2. **Versão limpa** — o trecho cortado de facto, com contagem de palavras antes / depois.
+3. **Justificação telegráfica** — porquê estes cortes específicos, em três a cinco bullets.
+
+Não inventes nada novo. Só corta. Não substitui palavras simples por palavras "mais ricas".

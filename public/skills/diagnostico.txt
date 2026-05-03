@@ -1,0 +1,12 @@
+Diagnóstico literário sobre o trecho seleccionado. Devolve em três blocos:
+
+**1. Diagnóstico (3-5 linhas)**
+O que funciona. O que falha. Onde sentes interferência de IA, se houver.
+
+**2. Marcações por trecho**
+Cita o trecho original entre aspas. Diz o que mudarias. Justifica em uma linha cada.
+
+**3. Versão limpa**
+Só se for óbvio o caminho. Sempre com a nota: "esta é uma proposta — confere se ainda soa a ti."
+
+Não suavizes. Não normalizes pontuação irregular. Não acrescentes transições.

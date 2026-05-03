@@ -4,6 +4,7 @@
   --bg-elev-2: #2c2c2c;
   --text: #e8e8e8;
   --text-dim: #9a9a9a;
+  --text-faint: #6f6f6f;
   --accent: #c97559;
   --accent-soft: #c9755933;
   --accent-strong: #d8866a;
@@ -37,16 +38,20 @@ body {
   height: 100dvh;
 }
 
+/* ---------- Toolbar (acções no documento) ---------- */
 .toolbar {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 6px;
-  padding: 10px;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 4px;
+  padding: 8px;
   background: var(--bg-elev);
   border-bottom: 1px solid var(--border);
   position: sticky;
   top: 0;
   z-index: 5;
+}
+.toolbar:has(.tool[data-action="comment"][hidden]) {
+  grid-template-columns: repeat(4, 1fr);
 }
 
 .tool {
@@ -57,7 +62,7 @@ body {
   background: var(--bg-elev-2);
   border: 1px solid var(--border);
   border-radius: 8px;
-  padding: 8px 6px;
+  padding: 8px 4px;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
   transition: background 0.15s, border-color 0.15s;
@@ -65,12 +70,54 @@ body {
 }
 .tool:hover { background: #353535; }
 .tool:active { background: var(--accent-soft); border-color: var(--accent); }
-.tool:disabled { opacity: 0.5; cursor: not-allowed; }
+.tool:disabled { opacity: 0.4; cursor: not-allowed; }
+.tool[hidden] { display: none; }
 
+/* ---------- Skills (workflows guardados) ---------- */
+.skills {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 8px 10px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+.skills::-webkit-scrollbar { height: 4px; }
+.skills::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+.skill {
+  flex: 0 0 auto;
+  font: inherit;
+  font-size: 12px;
+  color: var(--text);
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 6px 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.15s, border-color 0.15s;
+}
+.skill:hover { background: #353535; }
+.skill:active, .skill.running {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent-strong);
+}
+.skill:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* ---------- Blocos colapsáveis (system + voz) ---------- */
 .system-block {
-  padding: 8px 10px 0;
+  padding: 6px 10px 0;
   background: var(--bg);
 }
+.system-block + .system-block { padding-top: 0; }
+.voice-block { padding-bottom: 6px; border-bottom: 1px solid var(--border); }
+
 .sys-toggle {
   font: inherit;
   font-size: 12px;
@@ -85,6 +132,14 @@ body {
 }
 .sys-toggle .chev { transition: transform 0.15s; display: inline-block; }
 .sys-toggle[aria-expanded="true"] .chev { transform: rotate(90deg); }
+.sys-toggle .hint {
+  margin-left: 4px;
+  color: var(--text-faint);
+  font-size: 11px;
+}
+
+.sys-body { padding-bottom: 4px; }
+
 .sys-prompt {
   width: 100%;
   margin-top: 6px;
@@ -99,12 +154,17 @@ body {
   min-height: 60px;
 }
 .sys-prompt:focus { outline: 1px solid var(--accent); border-color: var(--accent); }
-.sys-reset {
-  margin-top: 6px;
-  margin-left: 0;
+.sys-reset { margin-top: 6px; font-size: 11px; }
+
+.micro {
+  display: block;
+  margin: 4px 0;
   font-size: 11px;
+  color: var(--text-faint);
+  line-height: 1.4;
 }
 
+/* ---------- Chip de contexto (selecção/doc anexo) ---------- */
 .context-chip {
   margin: 8px 10px 0;
   padding: 6px 8px 6px 10px;
@@ -129,6 +189,7 @@ body {
   padding: 0 4px;
 }
 
+/* ---------- Chat ---------- */
 .chat {
   flex: 1;
   overflow-y: auto;
@@ -146,6 +207,11 @@ body {
   padding: 24px 12px;
 }
 .empty-hint p { margin: 0; }
+.empty-hint em {
+  color: var(--accent);
+  font-style: normal;
+  font-weight: 500;
+}
 
 .msg {
   max-width: 88%;
@@ -173,13 +239,30 @@ body {
   color: #f0d4cb;
   font-size: 13px;
 }
+.msg.system-note {
+  align-self: stretch;
+  background: transparent;
+  border: 1px dashed var(--border);
+  color: var(--text-faint);
+  font-size: 12px;
+  font-style: italic;
+}
 .msg .meta {
   display: block;
   font-size: 11px;
   color: var(--text-dim);
   margin-top: 4px;
 }
+.msg.streaming::after {
+  content: "▍";
+  display: inline-block;
+  margin-left: 2px;
+  color: var(--accent);
+  animation: caret 0.9s step-end infinite;
+}
+@keyframes caret { 50% { opacity: 0; } }
 
+/* ---------- Loading dots ---------- */
 .loading {
   display: flex;
   justify-content: center;
@@ -199,6 +282,7 @@ body {
   40% { opacity: 1; transform: translateY(-2px); }
 }
 
+/* ---------- Composer ---------- */
 .composer {
   display: flex;
   gap: 6px;
@@ -236,6 +320,7 @@ body {
 .send:hover { background: var(--accent-strong); }
 .send:disabled { opacity: 0.5; cursor: not-allowed; }
 
+/* ---------- Footer ---------- */
 .footer {
   border-top: 1px solid var(--border);
   background: var(--bg);
@@ -270,8 +355,9 @@ body {
   border: none;
   color: var(--text-dim);
   cursor: pointer;
-  margin-left: auto;
   padding: 0;
   text-decoration: underline;
 }
+.link-btn + .link-btn { margin-left: 0; }
 .link-btn:hover { color: var(--text); }
+#exportChat { margin-left: auto; }

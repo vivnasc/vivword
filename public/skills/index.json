@@ -1,0 +1,44 @@
+[
+  {
+    "id": "diagnostico",
+    "label": "Diagnóstico",
+    "tip": "Diagnóstico literário em três blocos sobre a selecção",
+    "context": "selection",
+    "file": "diagnostico.txt"
+  },
+  {
+    "id": "voz",
+    "label": "Voz",
+    "tip": "Soa a ti, ou houve interferência?",
+    "context": "selection",
+    "file": "voz.txt"
+  },
+  {
+    "id": "cortar-gordura",
+    "label": "Cortar gordura",
+    "tip": "Mesma selecção, 20% menos palavras",
+    "context": "selection",
+    "file": "cortar-gordura.txt"
+  },
+  {
+    "id": "continuidade",
+    "label": "Continuidade",
+    "tip": "Inconsistências de personagens, datas, factos",
+    "context": "document",
+    "file": "continuidade.txt"
+  },
+  {
+    "id": "suspensao",
+    "label": "Suspensão",
+    "tip": "O fim desta cena fecha demais?",
+    "context": "selection",
+    "file": "suspensao.txt"
+  },
+  {
+    "id": "ia",
+    "label": "Caça IA",
+    "tip": "Padrões de IA infiltrados no texto",
+    "context": "selection",
+    "file": "ia.txt"
+  }
+]

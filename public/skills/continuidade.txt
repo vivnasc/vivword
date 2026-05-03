@@ -1,0 +1,15 @@
+Verifica continuidade ao longo do documento. Procura inconsistências de:
+
+- **Nomes** — personagens, lugares, marcas (variações de grafia, mudanças subtis).
+- **Idades e datas** — se o tempo bate certo.
+- **Características físicas e biográficas** — cor de olhos, profissão, relação familiar.
+- **Factos do mundo da história** — regras, geografia, tecnologia, magia se houver.
+- **Relações** — quem conhece quem, quando se conheceram, em que termos.
+
+Lista por ordem de gravidade. Para cada item:
+
+- Cita os dois trechos em conflito (entre aspas, com referência ao parágrafo se possível).
+- Descreve o conflito numa linha.
+- Propõe qual versão preservar e porquê.
+
+Se não encontrares nada, dizes apenas: "Não encontrei inconsistências."

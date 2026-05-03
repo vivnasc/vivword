@@ -1,22 +1,30 @@
-// VivWord — sidebar de chat com Claude dentro do Word.
-// Vanilla JS. Sem build. Compatível com WordApi 1.1 (iPad-friendly).
+// VivWord — sidebar de revisão literária com Claude dentro do Word.
+// Vanilla JS. Sem build. Targets WordApi 1.4 (margin comments + chat).
 
 (function () {
   'use strict';
 
-  // ---------- Estado de sessão (não persiste entre fechar/abrir) ----------
+  // ---------- Estado de sessão ----------
   const state = {
-    messages: [],          // [{ role: 'user'|'assistant', content: '...' }]
+    messages: [],          // [{ role, content, displayContent? }]
     pendingContext: null,  // { kind: 'selection'|'document', text, words }
-    lastAssistant: '',     // última resposta do Claude (para Inserir/Substituir)
+    lastAssistant: '',
     inFlight: false,
+    skills: [],
+    canComment: false,
   };
 
   const WORDS_WARN = 50000;
+  const SETTINGS_KEYS = {
+    history: 'vivword.history',
+    voice: 'vivword.voice',
+    model: 'vivword.model',
+    sysOverride: 'vivword.sysOverride',
+  };
 
   // ---------- DOM refs ----------
   const $ = (sel) => document.querySelector(sel);
-  const $$ = (sel) => document.querySelectorAll(sel);
+  const $$ = (sel) => Array.from(document.querySelectorAll(sel));
   const els = {
     chat: $('#chat'),
     input: $('#input'),
@@ -27,46 +35,103 @@
     sysToggle: $('#sysToggle'),
     sysPrompt: $('#sysPrompt'),
     sysReset: $('#sysReset'),
+    sysBody: $('#sysToggle + .sys-body'),
+    voiceToggle: $('#voiceToggle'),
+    voiceFingerprint: $('#voiceFingerprint'),
+    voiceStatus: $('#voiceStatus'),
+    voiceBody: $('#voiceToggle + .sys-body'),
+    skills: $('#skills'),
     contextChip: $('#contextChip'),
     contextLabel: $('#contextLabel'),
     contextClear: $('#contextClear'),
     clearChat: $('#clearChat'),
+    exportChat: $('#exportChat'),
+    commentBtn: $('.tool[data-action="comment"]'),
     app: $('#app'),
   };
 
-  // ---------- Default system prompt (carregado de ficheiro) ----------
-  async function loadDefaultSystemPrompt({ force = false } = {}) {
+  // ---------- Helpers de Office ----------
+  function officeAvailable() {
+    return typeof Office !== 'undefined' && typeof Word !== 'undefined';
+  }
+
+  function isApiSupported(set, version) {
     try {
-      const r = await fetch('default-system-prompt.txt', { cache: 'no-store' });
-      if (!r.ok) throw new Error('HTTP ' + r.status);
-      const text = (await r.text()).trim();
-      if (!text) return;
-      // Só sobrescreve se o campo estiver vazio, ou se for reposição explícita.
-      if (force || !els.sysPrompt.value.trim()) {
-        els.sysPrompt.value = text;
-      }
-      els.sysReset.dataset.available = '1';
-      // Visível apenas quando a secção do prompt está expandida.
-      const expanded = els.sysToggle.getAttribute('aria-expanded') === 'true';
-      els.sysReset.hidden = !expanded;
-      els.sysPrompt.placeholder = 'Ex.: És revisor literário. Mantém o estilo da autora.';
-    } catch (e) {
-      els.sysPrompt.placeholder = 'Ex.: És revisor literário. Mantém o estilo da autora.';
-      // Falha silenciosa; o campo continua editável e a sessão funciona.
-      if (typeof console !== 'undefined') console.warn('default-system-prompt:', e.message);
+      return !!(Office.context && Office.context.requirements &&
+        Office.context.requirements.isSetSupported(set, version));
+    } catch (_) { return false; }
+  }
+
+  function settingsAvailable() {
+    return officeAvailable() && Office.context && Office.context.document &&
+      Office.context.document.settings;
+  }
+
+  function settingsGet(key) {
+    if (!settingsAvailable()) return null;
+    try { return Office.context.document.settings.get(key); } catch (_) { return null; }
+  }
+
+  function settingsSet(key, value) {
+    if (!settingsAvailable()) return;
+    try {
+      Office.context.document.settings.set(key, value);
+      Office.context.document.settings.saveAsync(() => {});
+    } catch (_) {}
+  }
+
+  // Debounce factory para autosave.
+  function debounce(fn, ms) {
+    let t;
+    return (...args) => {
+      clearTimeout(t);
+      t = setTimeout(() => fn(...args), ms);
+    };
+  }
+
+  // ---------- Word actions (WordApi 1.4) ----------
+  function ensureWord() {
+    if (!officeAvailable()) {
+      throw new Error('Office.js indisponível. Abre dentro do Word.');
     }
   }
 
-  // ---------- Office.js boot ----------
-  let officeReady = false;
-  if (typeof Office !== 'undefined') {
-    Office.onReady(() => {
-      officeReady = true;
-      loadDefaultSystemPrompt();
+  async function readSelection() {
+    ensureWord();
+    return Word.run(async (context) => {
+      const sel = context.document.getSelection();
+      sel.load('text');
+      await context.sync();
+      return sel.text || '';
     });
-  } else {
-    // Fora do Word (preview no browser): carregar à mesma.
-    loadDefaultSystemPrompt();
+  }
+
+  async function readDocument() {
+    ensureWord();
+    return Word.run(async (context) => {
+      const body = context.document.body.getRange();
+      body.load('text');
+      await context.sync();
+      return body.text || '';
+    });
+  }
+
+  async function insertAtCursor(text) {
+    ensureWord();
+    return Word.run(async (context) => {
+      const sel = context.document.getSelection();
+      sel.insertText(text, 'Replace');
+      await context.sync();
+    });
+  }
+
+  async function commentOnSelection(text) {
+    ensureWord();
+    return Word.run(async (context) => {
+      const sel = context.document.getSelection();
+      sel.insertComment(text);
+      await context.sync();
+    });
   }
 
   // ---------- Render ----------
@@ -75,15 +140,20 @@
     if (hint) hint.remove();
   }
 
-  function appendMessage(role, text, meta) {
+  function appendMessage(role, text, opts = {}) {
     clearEmptyHint();
     const div = document.createElement('div');
-    div.className = 'msg ' + (role === 'user' ? 'user' : role === 'error' ? 'error' : 'claude');
+    const cls = role === 'user' ? 'user'
+              : role === 'error' ? 'error'
+              : role === 'system-note' ? 'system-note'
+              : 'claude';
+    div.className = 'msg ' + cls;
     div.textContent = text;
-    if (meta) {
+    if (opts.streaming) div.classList.add('streaming');
+    if (opts.meta) {
       const m = document.createElement('span');
       m.className = 'meta';
-      m.textContent = meta;
+      m.textContent = opts.meta;
       div.appendChild(m);
     }
     els.chat.appendChild(div);
@@ -91,11 +161,27 @@
     return div;
   }
 
+  function renderHistory() {
+    els.chat.innerHTML = '';
+    if (!state.messages.length) {
+      const hint = document.createElement('div');
+      hint.className = 'empty-hint';
+      hint.innerHTML = '<p>Olá. Pergunta algo, usa os botões para passar texto do documento, ou toca uma <em>skill</em>.</p>';
+      els.chat.appendChild(hint);
+      return;
+    }
+    for (const m of state.messages) {
+      const text = m.displayContent || m.content;
+      appendMessage(m.role === 'assistant' ? 'claude' : 'user', text);
+    }
+  }
+
   function setLoading(on) {
     state.inFlight = on;
     els.loading.hidden = !on;
     els.sendBtn.disabled = on;
     els.app.setAttribute('aria-busy', on ? 'true' : 'false');
+    $$('.skill').forEach((b) => { b.disabled = on; });
     if (on) els.chat.scrollTop = els.chat.scrollHeight;
   }
 
@@ -106,11 +192,8 @@
       return;
     }
     const c = state.pendingContext;
-    const label =
-      c.kind === 'selection'
-        ? `Selecção anexa (${c.words} palavra${c.words === 1 ? '' : 's'})`
-        : `Documento anexo (${c.words} palavra${c.words === 1 ? '' : 's'})`;
-    els.contextLabel.textContent = label;
+    const noun = c.kind === 'selection' ? 'Selecção' : 'Documento';
+    els.contextLabel.textContent = `${noun} anexo (${c.words.toLocaleString('pt-PT')} palavra${c.words === 1 ? '' : 's'})`;
     els.contextChip.hidden = false;
   }
 
@@ -120,48 +203,159 @@
     return m ? m.length : 0;
   }
 
-  // ---------- Office acções (WordApi 1.1) ----------
-  function ensureOffice() {
-    if (typeof Word === 'undefined' || typeof Office === 'undefined') {
-      throw new Error('Office.js não disponível. Abre o add-in dentro do Word.');
+  // ---------- Persistência ----------
+  function persistHistory() {
+    settingsSet(SETTINGS_KEYS.history, JSON.stringify(state.messages.slice(-40)));
+  }
+  const persistHistoryDebounced = debounce(persistHistory, 500);
+
+  function persistVoice() {
+    settingsSet(SETTINGS_KEYS.voice, els.voiceFingerprint.value || '');
+    flashVoiceStatus('guardado');
+  }
+  const persistVoiceDebounced = debounce(persistVoice, 700);
+
+  function flashVoiceStatus(text) {
+    els.voiceStatus.textContent = text;
+    setTimeout(() => { els.voiceStatus.textContent = ''; }, 1400);
+  }
+
+  function loadFromSettings() {
+    const hist = settingsGet(SETTINGS_KEYS.history);
+    if (hist) {
+      try {
+        const parsed = JSON.parse(hist);
+        if (Array.isArray(parsed)) {
+          state.messages = parsed;
+          const last = [...parsed].reverse().find((m) => m.role === 'assistant');
+          if (last) state.lastAssistant = last.content;
+        }
+      } catch (_) {}
+    }
+    const voice = settingsGet(SETTINGS_KEYS.voice);
+    if (voice) els.voiceFingerprint.value = voice;
+    const model = settingsGet(SETTINGS_KEYS.model);
+    if (model) els.model.value = model;
+    const sysOverride = settingsGet(SETTINGS_KEYS.sysOverride);
+    if (sysOverride) els.sysPrompt.value = sysOverride;
+  }
+
+  // ---------- System prompt + voz ----------
+  let defaultSystemLoaded = false;
+
+  async function loadDefaultSystemPrompt({ force = false } = {}) {
+    try {
+      const r = await fetch('default-system-prompt.txt', { cache: 'no-store' });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const text = (await r.text()).trim();
+      if (!text) return;
+      if (force || !els.sysPrompt.value.trim()) {
+        els.sysPrompt.value = text;
+        // Reposição apaga o override persistido para voltar a seguir o default.
+        if (force) settingsSet(SETTINGS_KEYS.sysOverride, '');
+      }
+      defaultSystemLoaded = true;
+      els.sysReset.dataset.available = '1';
+      const expanded = els.sysToggle.getAttribute('aria-expanded') === 'true';
+      els.sysReset.hidden = !expanded;
+      els.sysPrompt.placeholder = 'Edita ou repõe a instrução padrão.';
+    } catch (e) {
+      els.sysPrompt.placeholder = 'Ex.: És revisor literário. Mantém o estilo da autora.';
+      if (typeof console !== 'undefined') console.warn('default-system-prompt:', e.message);
     }
   }
 
-  async function readSelection() {
-    ensureOffice();
-    return Word.run(async (context) => {
-      const sel = context.document.getSelection();
-      sel.load('text');
-      await context.sync();
-      return sel.text || '';
-    });
+  function buildEffectiveSystem() {
+    const base = els.sysPrompt.value.trim();
+    const voice = els.voiceFingerprint.value.trim();
+    if (!voice) return base;
+    const voiceBlock = `\n\n## Voz canónica desta obra\n\nO que se segue são parágrafos que a autora reconhece como inquestionavelmente da sua voz. Usa-os como referência calibradora — não os cites de volta, não os repitas, apenas mede o que ela escreve por aqui.\n\n---\n${voice}\n---`;
+    return (base ? base : '') + voiceBlock;
   }
 
-  async function readDocument() {
-    ensureOffice();
-    return Word.run(async (context) => {
-      const body = context.document.body.getRange();
-      body.load('text');
-      await context.sync();
-      return body.text || '';
-    });
+  // ---------- Skills ----------
+  async function loadSkills() {
+    try {
+      const r = await fetch('skills/index.json', { cache: 'no-store' });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      state.skills = await r.json();
+      renderSkills();
+    } catch (e) {
+      if (typeof console !== 'undefined') console.warn('skills index:', e.message);
+    }
   }
 
-  async function insertAtCursor(text) {
-    ensureOffice();
-    return Word.run(async (context) => {
-      const sel = context.document.getSelection();
-      sel.insertText(text, 'Replace');
-      await context.sync();
-    });
+  function renderSkills() {
+    els.skills.innerHTML = '';
+    for (const sk of state.skills) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'skill';
+      btn.dataset.id = sk.id;
+      btn.title = sk.tip || sk.label;
+      btn.textContent = sk.label;
+      btn.addEventListener('click', () => runSkill(sk, btn));
+      els.skills.appendChild(btn);
+    }
   }
 
-  async function replaceSelection(text) {
-    // Em WordApi 1.1, "Replace" no insertText sobre a selecção substitui-a.
-    return insertAtCursor(text);
+  async function runSkill(sk, btn) {
+    if (state.inFlight) return;
+    btn.classList.add('running');
+    try {
+      // Preparar contexto: lê a fonte indicada pela skill.
+      let ctxText = '';
+      let ctxWords = 0;
+      if (sk.context === 'selection') {
+        ctxText = await readSelection();
+        if (!ctxText.trim()) {
+          appendMessage('error', 'Skill cancelada: nada seleccionado no documento.');
+          return;
+        }
+      } else if (sk.context === 'document') {
+        ctxText = await readDocument();
+        if (!ctxText.trim()) {
+          appendMessage('error', 'Skill cancelada: documento vazio.');
+          return;
+        }
+      }
+      ctxWords = countWords(ctxText);
+
+      // Carregar prompt da skill.
+      const promptText = await fetchSkillPrompt(sk);
+      if (!promptText) {
+        appendMessage('error', `Skill "${sk.label}" sem prompt definido.`);
+        return;
+      }
+
+      // Anexar contexto e enviar.
+      if (ctxText) {
+        state.pendingContext = { kind: sk.context, text: ctxText, words: ctxWords };
+        showContextChip();
+      }
+      appendMessage('system-note', `▸ skill "${sk.label}" sobre ${sk.context === 'selection' ? `selecção (${ctxWords} palavra${ctxWords === 1 ? '' : 's'})` : `documento (${ctxWords.toLocaleString('pt-PT')} palavras)`}`);
+      if (ctxWords > WORDS_WARN) {
+        appendMessage('system-note', `aviso: documento grande (>${WORDS_WARN.toLocaleString('pt-PT')} palavras). Pode demorar.`);
+      }
+      await dispatchUserMessage(promptText);
+    } catch (e) {
+      appendMessage('error', `Erro na skill: ${e.message}`);
+    } finally {
+      btn.classList.remove('running');
+    }
   }
 
-  // ---------- Acções da toolbar ----------
+  const skillPromptCache = new Map();
+  async function fetchSkillPrompt(sk) {
+    if (skillPromptCache.has(sk.id)) return skillPromptCache.get(sk.id);
+    const r = await fetch(`skills/${sk.file}`, { cache: 'no-store' });
+    if (!r.ok) return null;
+    const text = (await r.text()).trim();
+    skillPromptCache.set(sk.id, text);
+    return text;
+  }
+
+  // ---------- Toolbar actions ----------
   async function actionReadSelection() {
     try {
       const text = await readSelection();
@@ -172,7 +366,7 @@
       const words = countWords(text);
       state.pendingContext = { kind: 'selection', text, words };
       showContextChip();
-      appendMessage('claude', `Selecção lida: ${words} palavra${words === 1 ? '' : 's'}. Anexada à próxima mensagem.`);
+      appendMessage('system-note', `selecção lida — ${words} palavra${words === 1 ? '' : 's'} anexa${words === 1 ? '' : 's'} à próxima mensagem`);
     } catch (e) {
       appendMessage('error', 'Erro ao ler selecção: ' + e.message);
     }
@@ -188,11 +382,10 @@
       const words = countWords(text);
       state.pendingContext = { kind: 'document', text, words };
       showContextChip();
-      let note = `Documento lido: ${words.toLocaleString('pt-PT')} palavras. Anexado à próxima mensagem.`;
+      appendMessage('system-note', `documento lido — ${words.toLocaleString('pt-PT')} palavras anexas à próxima mensagem`);
       if (words > WORDS_WARN) {
-        note += `\n\n⚠ Documento grande (>${WORDS_WARN.toLocaleString('pt-PT')} palavras). Pode demorar e consumir muitos tokens.`;
+        appendMessage('system-note', `aviso: documento grande (>${WORDS_WARN.toLocaleString('pt-PT')} palavras). Pode demorar e consumir muitos tokens.`);
       }
-      appendMessage('claude', note);
     } catch (e) {
       appendMessage('error', 'Erro ao ler documento: ' + e.message);
     }
@@ -205,7 +398,7 @@
     }
     try {
       await insertAtCursor(state.lastAssistant);
-      appendMessage('claude', 'Resposta inserida no documento.');
+      appendMessage('system-note', 'resposta inserida no documento');
     } catch (e) {
       appendMessage('error', 'Erro ao inserir: ' + e.message);
     }
@@ -217,16 +410,32 @@
       return;
     }
     try {
-      await replaceSelection(state.lastAssistant);
-      appendMessage('claude', 'Selecção substituída.');
+      await insertAtCursor(state.lastAssistant);
+      appendMessage('system-note', 'selecção substituída');
     } catch (e) {
       appendMessage('error', 'Erro ao substituir: ' + e.message);
     }
   }
 
-  // ---------- Envio para o backend ----------
+  async function actionComment() {
+    if (!state.canComment) {
+      appendMessage('error', 'O Word desta máquina não suporta comentários por API.');
+      return;
+    }
+    if (!state.lastAssistant) {
+      appendMessage('error', 'Ainda não há resposta do Claude para comentar.');
+      return;
+    }
+    try {
+      await commentOnSelection(state.lastAssistant);
+      appendMessage('system-note', 'comentário do Claude inserido na margem');
+    } catch (e) {
+      appendMessage('error', 'Erro ao comentar: ' + e.message);
+    }
+  }
+
+  // ---------- Chat: composer ↔ API ----------
   function buildMessagesForApi(userText) {
-    // Se há contexto pendente, prepende-o à mensagem do utilizador como bloco rotulado.
     let composed = userText;
     if (state.pendingContext) {
       const c = state.pendingContext;
@@ -235,33 +444,92 @@
     }
     const history = state.messages.map((m) => ({ role: m.role, content: m.content }));
     history.push({ role: 'user', content: composed });
-    return history;
+    return { apiMessages: history, composed };
   }
 
-  async function sendToClaude(userText) {
-    const apiMessages = buildMessagesForApi(userText);
-    const payload = {
-      model: els.model.value,
-      messages: apiMessages,
-      system: els.sysPrompt.value.trim(),
-      stream: false,
-    };
+  async function sendStreaming(payload, bubble) {
+    const r = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ ...payload, stream: true }),
+    });
+    if (!r.ok) {
+      let msg = `HTTP ${r.status}`;
+      try { const j = await r.json(); if (j && j.error) msg = j.error; } catch (_) {}
+      throw new Error(msg);
+    }
+    if (!r.body || !r.body.getReader) {
+      // Fallback se o ambiente não suporta streams: lê tudo de uma vez.
+      const text = await r.text();
+      return parseSseAccumulated(text, bubble);
+    }
+    const reader = r.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let assembled = '';
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const events = buffer.split('\n\n');
+      buffer = events.pop() || '';
+      for (const ev of events) {
+        const piece = parseSseEvent(ev);
+        if (piece) {
+          assembled += piece;
+          bubble.firstChild ? (bubble.firstChild.nodeValue = assembled) : (bubble.textContent = assembled);
+          els.chat.scrollTop = els.chat.scrollHeight;
+        }
+      }
+    }
+    if (buffer.trim()) {
+      const piece = parseSseEvent(buffer);
+      if (piece) {
+        assembled += piece;
+        bubble.textContent = assembled;
+      }
+    }
+    return assembled;
+  }
 
+  function parseSseEvent(raw) {
+    // Anthropic envia: event: <name>\ndata: {...}
+    let dataLine = '';
+    for (const line of raw.split('\n')) {
+      if (line.startsWith('data:')) dataLine += line.slice(5).trim();
+    }
+    if (!dataLine) return '';
+    if (dataLine === '[DONE]') return '';
+    try {
+      const j = JSON.parse(dataLine);
+      if (j.type === 'content_block_delta' && j.delta && j.delta.type === 'text_delta') {
+        return j.delta.text || '';
+      }
+    } catch (_) {}
+    return '';
+  }
+
+  function parseSseAccumulated(text, bubble) {
+    let assembled = '';
+    for (const ev of text.split('\n\n')) {
+      const piece = parseSseEvent(ev);
+      if (piece) assembled += piece;
+    }
+    bubble.textContent = assembled;
+    return assembled;
+  }
+
+  async function sendNonStreaming(payload) {
     const r = await fetch('/api/chat', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(payload),
     });
-
     if (!r.ok) {
       let msg = `HTTP ${r.status}`;
-      try {
-        const j = await r.json();
-        if (j && j.error) msg = j.error;
-      } catch (_) {}
+      try { const j = await r.json(); if (j && j.error) msg = j.error; } catch (_) {}
       throw new Error(msg);
     }
-
     const data = await r.json();
     const blocks = Array.isArray(data.content) ? data.content : [];
     const text = blocks.filter((b) => b && b.type === 'text').map((b) => b.text).join('\n').trim();
@@ -269,39 +537,59 @@
     return text;
   }
 
-  async function handleSend() {
+  async function dispatchUserMessage(userText) {
     if (state.inFlight) return;
-    const userText = els.input.value.trim();
-    if (!userText && !state.pendingContext) return;
+    if (!userText.trim() && !state.pendingContext) return;
 
-    const effective = userText || '(Analisa o texto anexo.)';
+    const effective = userText.trim() || '(Analisa o texto anexo segundo a instrução.)';
+    const { apiMessages, composed } = buildMessagesForApi(effective);
+
     appendMessage('user', effective);
-
-    // Guarda no histórico a versão composta (com contexto), para o Claude poder referir-se.
-    const composedForHistory = (() => {
-      if (!state.pendingContext) return effective;
-      const c = state.pendingContext;
-      const label = c.kind === 'selection' ? 'SELECÇÃO DO DOCUMENTO' : 'DOCUMENTO COMPLETO';
-      return `[${label}]\n${c.text}\n[/${label}]\n\n${effective}`;
-    })();
-
-    els.input.value = '';
-    autoresize();
+    state.messages.push({ role: 'user', content: composed, displayContent: effective });
+    persistHistoryDebounced();
 
     setLoading(true);
+    const bubble = appendMessage('claude', '', { streaming: true });
     try {
-      const reply = await sendToClaude(effective);
-      state.messages.push({ role: 'user', content: composedForHistory });
+      const payload = {
+        model: els.model.value,
+        messages: apiMessages,
+        system: buildEffectiveSystem(),
+      };
+      let reply;
+      try {
+        reply = await sendStreaming(payload, bubble);
+      } catch (streamErr) {
+        // Fallback gracioso para não-streaming.
+        bubble.textContent = '';
+        reply = await sendNonStreaming({ ...payload, stream: false });
+        bubble.textContent = reply;
+      }
+      bubble.classList.remove('streaming');
+      if (!reply || !reply.trim()) {
+        bubble.remove();
+        appendMessage('error', 'Resposta vazia da Anthropic.');
+        return;
+      }
       state.messages.push({ role: 'assistant', content: reply });
       state.lastAssistant = reply;
       state.pendingContext = null;
       showContextChip();
-      appendMessage('claude', reply);
+      persistHistoryDebounced();
     } catch (e) {
-      appendMessage('error', e.message);
+      bubble.remove();
+      appendMessage('error', e.message || String(e));
     } finally {
       setLoading(false);
     }
+  }
+
+  async function handleSend() {
+    const userText = els.input.value;
+    if (!userText.trim() && !state.pendingContext) return;
+    els.input.value = '';
+    autoresize();
+    await dispatchUserMessage(userText);
   }
 
   // ---------- UI helpers ----------
@@ -315,11 +603,56 @@
     state.lastAssistant = '';
     state.pendingContext = null;
     showContextChip();
-    els.chat.innerHTML = '<div class="empty-hint"><p>Conversa limpa. Pergunta algo novo.</p></div>';
+    persistHistory();
+    renderHistory();
   }
 
-  // ---------- Bindings ----------
-  document.addEventListener('DOMContentLoaded', () => {
+  function exportConversationMarkdown() {
+    if (!state.messages.length) {
+      appendMessage('system-note', 'nada para exportar');
+      return;
+    }
+    const lines = ['# Conversa VivWord', ''];
+    for (const m of state.messages) {
+      const text = m.displayContent || m.content;
+      lines.push(`## ${m.role === 'assistant' ? 'Claude' : 'Vivianne'}`);
+      lines.push('');
+      lines.push(text);
+      lines.push('');
+    }
+    const md = lines.join('\n');
+    const fallback = () => {
+      const ta = document.createElement('textarea');
+      ta.value = md;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand('copy'); } catch (_) {}
+      document.body.removeChild(ta);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(md).then(
+        () => appendMessage('system-note', 'conversa copiada como Markdown — cola onde quiseres'),
+        () => { fallback(); appendMessage('system-note', 'conversa copiada (fallback)'); }
+      );
+    } else {
+      fallback();
+      appendMessage('system-note', 'conversa copiada como Markdown');
+    }
+  }
+
+  function bindToggle(toggleEl, bodyEl, onExpand) {
+    toggleEl.addEventListener('click', () => {
+      const expanded = toggleEl.getAttribute('aria-expanded') === 'true';
+      toggleEl.setAttribute('aria-expanded', expanded ? 'false' : 'true');
+      bodyEl.hidden = expanded;
+      if (!expanded && typeof onExpand === 'function') onExpand();
+    });
+  }
+
+  // ---------- Boot ----------
+  function bindEvents() {
     $$('.tool').forEach((btn) => {
       btn.addEventListener('click', () => {
         const action = btn.dataset.action;
@@ -327,6 +660,7 @@
         else if (action === 'read-document') actionReadDocument();
         else if (action === 'insert') actionInsert();
         else if (action === 'replace') actionReplace();
+        else if (action === 'comment') actionComment();
       });
     });
 
@@ -337,19 +671,27 @@
 
     els.input.addEventListener('input', autoresize);
     els.input.addEventListener('keydown', (e) => {
-      // Enter envia, Shift+Enter quebra linha. No iPad, o teclado mostra "return"; mantemos o botão Enviar visível.
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
         handleSend();
       }
     });
 
-    els.sysToggle.addEventListener('click', () => {
-      const expanded = els.sysToggle.getAttribute('aria-expanded') === 'true';
-      els.sysToggle.setAttribute('aria-expanded', expanded ? 'false' : 'true');
-      els.sysPrompt.hidden = expanded;
-      els.sysReset.hidden = expanded || !els.sysReset.dataset.available;
-      if (!expanded) els.sysPrompt.focus();
+    bindToggle(els.sysToggle, els.sysBody, () => {
+      els.sysPrompt.focus();
+      if (els.sysReset.dataset.available) els.sysReset.hidden = false;
+    });
+    bindToggle(els.voiceToggle, els.voiceBody, () => els.voiceFingerprint.focus());
+
+    const persistSysOverrideDebounced = debounce(() => {
+      settingsSet(SETTINGS_KEYS.sysOverride, els.sysPrompt.value);
+    }, 700);
+    els.sysPrompt.addEventListener('input', persistSysOverrideDebounced);
+    els.voiceFingerprint.addEventListener('input', () => {
+      persistVoiceDebounced();
+    });
+    els.model.addEventListener('change', () => {
+      settingsSet(SETTINGS_KEYS.model, els.model.value);
     });
 
     els.sysReset.addEventListener('click', () => {
@@ -363,6 +705,42 @@
       showContextChip();
     });
 
-    els.clearChat.addEventListener('click', clearChat);
-  });
+    els.clearChat.addEventListener('click', () => {
+      if (state.messages.length && !confirm('Limpar a conversa deste documento?')) return;
+      clearChat();
+    });
+
+    els.exportChat.addEventListener('click', exportConversationMarkdown);
+  }
+
+  function detectCapabilities() {
+    state.canComment = isApiSupported('WordApi', '1.4');
+    if (els.commentBtn) {
+      els.commentBtn.hidden = !state.canComment;
+    }
+  }
+
+  function boot() {
+    bindEvents();
+    if (officeAvailable()) {
+      Office.onReady(() => {
+        detectCapabilities();
+        loadFromSettings();
+        loadDefaultSystemPrompt();
+        loadSkills();
+        renderHistory();
+      });
+    } else {
+      // Preview no browser puro (sem Word à volta).
+      loadDefaultSystemPrompt();
+      loadSkills();
+      renderHistory();
+    }
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', boot);
+  } else {
+    boot();
+  }
 })();

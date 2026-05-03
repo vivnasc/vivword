@@ -1,0 +1,16 @@
+Caça padrões de IA infiltrados no trecho seleccionado. Procura especificamente:
+
+- **Tricolons gratuitos** — "não era apenas X, era Y, era Z"
+- **"Não é só… é também…"** — estrutura de ensaio motivacional
+- **"Num mundo onde…"** — abertura de copy de marketing
+- **Adjectivos em pares** — "vasto e profundo", "delicado e cru"
+- **Metáforas-cliché de IA** — tapeçaria, mosaico, sinfonia, dança, jornada, viagem interior, abraço do universo
+- **Resumos no fim do parágrafo** — IA gosta de explicar o que acabou de dizer
+- **Travessões em excesso** — usados como muleta de ritmo
+- **Advérbios de preenchimento** — "de facto", "na verdade", "essencialmente"
+- **Voz passiva sem peso emocional**
+- **Repetições não deliberadas** — palavra que aparece três vezes em duas páginas sem função
+
+Lista cada ocorrência com a frase exacta entre aspas e o tipo de padrão. **Não sugiras alternativa** — só identifica. A autora decide.
+
+Se o trecho está limpo, dizes só: "Não detectei marcas de IA."
