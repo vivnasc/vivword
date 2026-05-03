@@ -6,35 +6,6 @@ const ANTHROPIC_VERSION = '2023-06-01';
 const DEFAULT_MAX_TOKENS = 4096;
 const ALLOWED_MODELS = new Set(['claude-opus-4-5', 'claude-sonnet-4-5']);
 
-// Redacção mínima de identificadores BM antes de enviar para Anthropic.
-// NUITs (9 dígitos), códigos BM-XXX, e blocos longos de dígitos.
-function redactBM(text) {
-  if (typeof text !== 'string') return text;
-  return text
-    .replace(/\bBM[-\s]?[A-Za-z0-9_-]+\b/g, '[BM-REDACTED]')
-    .replace(/\b\d{9}\b/g, '[NUIT-REDACTED]')
-    .replace(/\b\d{12,}\b/g, '[NUM-REDACTED]');
-}
-
-function redactMessages(messages) {
-  return messages.map((m) => {
-    if (typeof m.content === 'string') {
-      return { ...m, content: redactBM(m.content) };
-    }
-    if (Array.isArray(m.content)) {
-      return {
-        ...m,
-        content: m.content.map((block) =>
-          block && block.type === 'text' && typeof block.text === 'string'
-            ? { ...block, text: redactBM(block.text) }
-            : block
-        ),
-      };
-    }
-    return m;
-  });
-}
-
 function setCors(req, res) {
   const origin = req.headers.origin || '';
   const allowed =
@@ -106,7 +77,6 @@ module.exports = async (req, res) => {
     model = 'claude-opus-4-5',
     system,
     max_tokens,
-    redactBM: redact = false,
     stream = false,
   } = body || {};
 
@@ -119,17 +89,14 @@ module.exports = async (req, res) => {
     return;
   }
 
-  const finalMessages = redact ? redactMessages(messages) : messages;
-  const finalSystem = redact && typeof system === 'string' ? redactBM(system) : system;
-
   const payload = {
     model,
     max_tokens: Math.min(Math.max(parseInt(max_tokens, 10) || DEFAULT_MAX_TOKENS, 1), 8192),
-    messages: finalMessages,
+    messages,
     stream: !!stream,
   };
-  if (finalSystem && typeof finalSystem === 'string' && finalSystem.trim()) {
-    payload.system = finalSystem;
+  if (system && typeof system === 'string' && system.trim()) {
+    payload.system = system;
   }
 
   let upstream;

@@ -8,7 +8,6 @@
   --accent-soft: #c9755933;
   --accent-strong: #d8866a;
   --border: #333;
-  --warn: #c97559;
   --user-bubble: #2f2f2f;
   --claude-bubble: #242424;
 }
@@ -264,13 +263,6 @@ body {
   border-radius: 6px;
   padding: 4px 6px;
 }
-.bm-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  cursor: pointer;
-}
-.bm-toggle input { accent-color: var(--accent); }
 .link-btn {
   font: inherit;
   font-size: 12px;
@@ -283,10 +275,3 @@ body {
   text-decoration: underline;
 }
 .link-btn:hover { color: var(--text); }
-
-.warn {
-  margin-top: 6px;
-  font-size: 11px;
-  color: var(--warn);
-  opacity: 0.85;
-}

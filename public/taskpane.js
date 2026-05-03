@@ -24,7 +24,6 @@
     sendBtn: $('#sendBtn'),
     loading: $('#loading'),
     model: $('#model'),
-    bmMode: $('#bmMode'),
     sysToggle: $('#sysToggle'),
     sysPrompt: $('#sysPrompt'),
     sysReset: $('#sysReset'),
@@ -245,7 +244,6 @@
       model: els.model.value,
       messages: apiMessages,
       system: els.sysPrompt.value.trim(),
-      redactBM: !!els.bmMode.checked,
       stream: false,
     };
 

@@ -127,22 +127,12 @@ Copiar `manifest.xml` para lá. Reabrir Word. **Insert → My Add-ins → Develo
 
 - **v2** — tracked changes via `range.insertText` com formatação custom; histórico recente de respostas inseríveis.
 - **v3** — persistência de conversa via OneDrive (file pickers do Office).
-- **v4** — **SKILLS** reutilizáveis: templates de prompt guardados (ex.: "Revisão literária", "Resumo executivo BM público", "Tradução PT↔EN").
+- **v4** — **SKILLS** reutilizáveis: templates de prompt guardados (ex.: "Revisão literária", "Diagnóstico estrutural", "Tradução PT↔EN").
 - **v5** — streaming SSE estável em iPad, exportação de conversa para .docx.
 
 ---
 
-## 8. Política de uso (BM)
-
-A autora trabalha no **Banco de Moçambique** sob **Ordem de Serviço n.º 18/2026**. O add-in inclui um aviso fixo no rodapé:
-
-> ⚠ Não inserir dados confidenciais BM. Uso pessoal apenas.
-
-E um toggle **Modo BM** que, quando activo, redacta no servidor (antes de chamar a Anthropic) padrões tipo NUITs (`\b\d{9}\b`) e códigos `BM-XXX` antes do envio. **Não substitui** uma triagem humana; é um cinto de segurança, não um cofre. Para conteúdo BM real, **não usar**.
-
----
-
-## 9. Estrutura
+## 8. Estrutura
 
 ```
 vivword/
@@ -165,13 +155,14 @@ vivword/
 
 ---
 
-## 9b. Instrução padrão (system prompt)
+## 9. Instrução padrão (system prompt)
 
 O campo **"Instrução para o Claude"** no taskpane vem pré-preenchido a partir de `public/default-system-prompt.txt` (carregado por fetch no boot). Para mudar o default sem tocar em código, edita esse ficheiro e faz commit + redeploy. O botão **"Repor instrução padrão"** (visível quando a secção está expandida) recarrega o ficheiro a quente. O valor da sessão pode sempre ser editado livremente — só é enviado como `system` ao chamar a API.
 
 ---
 
 ## 10. Desenvolvimento local
+
 
 ```bash
 cp .env.example .env
