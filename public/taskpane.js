@@ -96,20 +96,65 @@
     }
   }
 
-  async function readSelection() {
-    ensureWord();
-    return Word.run(async (context) => {
-      const sel = context.document.getSelection();
-      sel.load('text');
-      await context.sync();
-      return sel.text || '';
+  // Wrappers do Office. A API legada (Common API: getSelectedDataAsync,
+  // setSelectedDataAsync) é muito mais estável no iPad Safari + Word web do
+  // que `Word.run + getSelection`. Usamos a legada para selecção e para
+  // inserção/substituição. A API moderna (Word.run) só é usada onde a legada
+  // não chega: ler o documento todo e inserir comentário na margem.
+
+  function getSelectedTextAsync() {
+    return new Promise((resolve, reject) => {
+      if (typeof Office === 'undefined' || !Office.context || !Office.context.document) {
+        reject(new Error('Office.js indisponível.'));
+        return;
+      }
+      try {
+        Office.context.document.getSelectedDataAsync(
+          Office.CoercionType.Text,
+          (result) => {
+            if (result.status === Office.AsyncResultStatus.Succeeded) {
+              resolve(result.value || '');
+            } else {
+              const msg = (result.error && result.error.message) || 'Falha ao ler selecção.';
+              reject(new Error(msg));
+            }
+          }
+        );
+      } catch (e) {
+        reject(e);
+      }
     });
+  }
+
+  function setSelectedTextAsync(text) {
+    return new Promise((resolve, reject) => {
+      if (typeof Office === 'undefined' || !Office.context || !Office.context.document) {
+        reject(new Error('Office.js indisponível.'));
+        return;
+      }
+      try {
+        Office.context.document.setSelectedDataAsync(
+          text,
+          { coercionType: Office.CoercionType.Text },
+          (result) => {
+            if (result.status === Office.AsyncResultStatus.Succeeded) resolve();
+            else reject(new Error((result.error && result.error.message) || 'Falha ao inserir.'));
+          }
+        );
+      } catch (e) {
+        reject(e);
+      }
+    });
+  }
+
+  async function readSelection() {
+    return getSelectedTextAsync();
   }
 
   async function readDocument() {
     ensureWord();
     return Word.run(async (context) => {
-      const body = context.document.body.getRange();
+      const body = context.document.body;
       body.load('text');
       await context.sync();
       return body.text || '';
@@ -117,12 +162,7 @@
   }
 
   async function insertAtCursor(text) {
-    ensureWord();
-    return Word.run(async (context) => {
-      const sel = context.document.getSelection();
-      sel.insertText(text, 'Replace');
-      await context.sync();
-    });
+    return setSelectedTextAsync(text);
   }
 
   async function commentOnSelection(text) {
