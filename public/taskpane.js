@@ -787,7 +787,13 @@
     if (typeof Office !== 'undefined' && typeof Office.onReady === 'function') {
       Office.onReady((info) => {
         const HostType = (typeof Office !== 'undefined' && Office.HostType) || {};
-        state.inWord = !!(info && info.host && HostType.Word && info.host === HostType.Word);
+        const hostMatchesWord = !!(info && info.host && HostType.Word && info.host === HostType.Word);
+        // Detecção defensiva: alguns hosts não preenchem info.host correctamente
+        // (Word web em certas versões devolve null). Se a selection API existe
+        // como função, considera-se que estamos dentro de um host do Word.
+        const docApiPresent = !!(Office.context && Office.context.document &&
+          typeof Office.context.document.getSelectedDataAsync === 'function');
+        state.inWord = hostMatchesWord || docApiPresent;
         detectCapabilities();
         if (state.inWord) loadFromSettings();
         loadDefaultSystemPrompt();
