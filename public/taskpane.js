@@ -12,6 +12,7 @@
     inFlight: false,
     skills: [],
     canComment: false,
+    inWord: false,
   };
 
   const WORDS_WARN = 50000;
@@ -104,8 +105,8 @@
 
   function getSelectedTextAsync() {
     return new Promise((resolve, reject) => {
-      if (typeof Office === 'undefined' || !Office.context || !Office.context.document) {
-        reject(new Error('Office.js indisponível.'));
+      if (!state.inWord) {
+        reject(new Error('Esta acção precisa do Word à volta. Abre o add-in dentro de word.office.com (ou no app Word) — não funciona na pré-visualização.'));
         return;
       }
       try {
@@ -128,8 +129,8 @@
 
   function setSelectedTextAsync(text) {
     return new Promise((resolve, reject) => {
-      if (typeof Office === 'undefined' || !Office.context || !Office.context.document) {
-        reject(new Error('Office.js indisponível.'));
+      if (!state.inWord) {
+        reject(new Error('Esta acção precisa do Word à volta.'));
         return;
       }
       try {
@@ -332,7 +333,13 @@
       btn.type = 'button';
       btn.className = 'skill';
       btn.dataset.id = sk.id;
-      btn.title = sk.tip || sk.label;
+      const needsHost = sk.context === 'selection' || sk.context === 'document';
+      if (needsHost && !state.inWord) {
+        btn.disabled = true;
+        btn.title = 'Disponível apenas dentro do Word';
+      } else {
+        btn.title = sk.tip || sk.label;
+      }
       btn.textContent = sk.label;
       btn.addEventListener('click', () => runSkill(sk, btn));
       els.skills.appendChild(btn);
@@ -754,27 +761,45 @@
   }
 
   function detectCapabilities() {
-    state.canComment = isApiSupported('WordApi', '1.4');
+    state.canComment = state.inWord && isApiSupported('WordApi', '1.4');
     if (els.commentBtn) {
       els.commentBtn.hidden = !state.canComment;
+    }
+    // Desactiva visualmente as acções que precisam do Word à volta.
+    $$('.tool').forEach((btn) => {
+      const action = btn.dataset.action;
+      const needsHost = ['read-selection', 'read-document', 'insert', 'replace', 'comment'].includes(action);
+      if (needsHost && !state.inWord) {
+        btn.disabled = true;
+        btn.title = 'Disponível apenas dentro do Word';
+      }
+    });
+    if (!state.inWord) {
+      const note = document.createElement('div');
+      note.className = 'msg system-note';
+      note.textContent = 'Modo pré-visualização: estás a abrir o taskpane fora do Word. O chat funciona, mas as acções e skills que tocam no documento precisam do Word à volta. Abre via word.office.com com o add-in carregado para usares tudo.';
+      els.chat.appendChild(note);
     }
   }
 
   function boot() {
     bindEvents();
-    if (officeAvailable()) {
-      Office.onReady(() => {
+    if (typeof Office !== 'undefined' && typeof Office.onReady === 'function') {
+      Office.onReady((info) => {
+        const HostType = (typeof Office !== 'undefined' && Office.HostType) || {};
+        state.inWord = !!(info && info.host && HostType.Word && info.host === HostType.Word);
         detectCapabilities();
-        loadFromSettings();
+        if (state.inWord) loadFromSettings();
         loadDefaultSystemPrompt();
         loadSkills();
         renderHistory();
       });
     } else {
-      // Preview no browser puro (sem Word à volta).
+      // Office.js falhou a carregar. Modo standalone básico.
       loadDefaultSystemPrompt();
       loadSkills();
       renderHistory();
+      detectCapabilities();
     }
   }
 
